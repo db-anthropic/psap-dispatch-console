@@ -130,7 +130,7 @@ export const tools = {
 
   lookup_emergency_contacts: tool({
     description:
-      "Look up PSAP and AHJ (EMS, Fire, Police) emergency contacts for a US address. Returns dispatch center info, agency contacts with phone numbers, and the PSAP site address for route calculation.",
+      "Look up PSAP and AHJ (EMS, Fire, Police) emergency contacts for a US address. Returns dispatch center info, agency contacts with phone numbers and mailing addresses. Use the relevant AHJ's mailingAddress (geocoded) as the route start point — Fire AHJ for fire calls, EMS AHJ for medical, Police AHJ for police.",
     inputSchema: z.object({
       addressLine1: z.string().describe("Full street address line (e.g. '350 Jordan Rd Troy NY 12180, USA')"),
       city: z.string().describe("City name"),
@@ -185,6 +185,7 @@ export const tools = {
         agency: ahj.agency || "Unknown",
         phone: ahj.phone || "Unknown",
         ahjId: ahj.ahjId || "",
+        mailingAddress: ahj.mailingAddress || "",
       }));
 
       return { psap, ahjs };

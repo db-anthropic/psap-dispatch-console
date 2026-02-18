@@ -127,6 +127,7 @@ export default function Home() {
             onInputChange={setInput}
             onSubmit={handleSubmit}
             onScenario={handleScenario}
+            narrative={narrative}
           />
         </div>
 

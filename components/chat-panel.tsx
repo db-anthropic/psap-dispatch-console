@@ -27,6 +27,7 @@ interface ChatPanelProps {
   onInputChange: (value: string) => void;
   onSubmit: (e: React.FormEvent) => void;
   onScenario: (message: string) => void;
+  narrative: string;
 }
 
 export function ChatPanel({
@@ -36,6 +37,7 @@ export function ChatPanel({
   onInputChange,
   onSubmit,
   onScenario,
+  narrative,
 }: ChatPanelProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -86,6 +88,8 @@ export function ChatPanel({
           <div key={message.id}>
             {(message.parts as any[]).map((part: any, i: number) => {
               if (part.type === "text" && part.text?.trim()) {
+                // Filter out the dispatch briefing — it shows in the intelligence panel
+                if (narrative && part.text === narrative) return null;
                 const isUser = message.role === "user";
                 return (
                   <div
