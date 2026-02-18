@@ -1,11 +1,25 @@
 import { tool } from "ai";
 import { z } from "zod";
-import { preciselyPost, preciselyGet } from "./precisely";
+import { preciselyPost, preciselyGet, preciselyGraphQL } from "./precisely";
+
+/* eslint-disable @typescript-eslint/no-explicit-any */
+
+/**
+ * Extract lat/lon from the Precisely geocode response location field.
+ * Coordinates are in GeoJSON format: [longitude, latitude]
+ */
+function extractCoordinates(location: any): { latitude: number | null; longitude: number | null } {
+  const coords = location?.feature?.geometry?.coordinates;
+  if (Array.isArray(coords) && coords.length >= 2) {
+    return { latitude: coords[1], longitude: coords[0] };
+  }
+  return { latitude: null, longitude: null };
+}
 
 export const tools = {
   verify_address: tool({
     description:
-      "Verify and standardize a US street address. Returns the standardized address, confidence score, PreciselyID, and coordinates (lat/lon). Call this as soon as the caller provides an address. Coordinates are included — only use geocode_address as a fallback if this returns no coordinates.",
+      "Verify and standardize a US street address. Returns the standardized address, confidence score, and PreciselyID (PB_KEY). Does NOT return coordinates — call geocode_address after this to get lat/lon.",
     inputSchema: z.object({
       addressLine1: z.string().describe("Street address line 1 (e.g. '350 Jordan Rd')"),
       addressLine2: z.string().optional().describe("Street address line 2 (suite, apt, etc.)"),
@@ -14,10 +28,16 @@ export const tools = {
       postalCode: z.string().optional().describe("ZIP code"),
     }),
     execute: async ({ addressLine1, addressLine2, city, state, postalCode }) => {
-      const addressLines = [addressLine1];
-      if (addressLine2) addressLines.push(addressLine2);
+      const addressLines = addressLine2
+        ? [`${addressLine1}, ${addressLine2}`]
+        : [addressLine1];
 
-      const data = await preciselyPost("/v1/addresses/verify", {
+      const data = await preciselyPost("/v1/verify", {
+        preferences: {
+          maxResults: 1,
+          returnAllInfo: true,
+          factoryDescription: { label: "ggs", featureSpecific: {} },
+        },
         addresses: [
           {
             addressLines,
@@ -33,33 +53,32 @@ export const tools = {
         return { error: `Address verification failed: ${JSON.stringify(data.details)}` };
       }
 
-      const responses = data.responses as Array<Record<string, unknown>>;
-      if (!responses?.[0]) {
+      const responses = data.responses as any[];
+      const results = responses?.[0]?.results as any[];
+      if (!results?.[0]) {
         return { error: "No address verification results returned" };
       }
 
-      const result = responses[0];
-      const address = result.address as Record<string, unknown> | undefined;
-      const geocode = result.geocode as Record<string, unknown> | undefined;
+      const result = results[0];
+      const address = result.address || {};
+      const cf = result.customFields || {};
 
       return {
-        formattedAddress: address?.formattedAddress || "",
-        streetAddress: address?.formattedStreetAddress || "",
-        city: address?.city || "",
-        state: address?.admin1 || "",
-        postalCode: address?.postalCode || "",
-        country: address?.country || "",
-        preciselyId: address?.preciselyId || "",
-        confidence: result.confidence ?? null,
-        latitude: geocode?.latitude ?? null,
-        longitude: geocode?.longitude ?? null,
+        formattedAddress: address.formattedAddress || "",
+        streetAddress: address.formattedStreetAddress || "",
+        city: address.city?.longName || address.city?.shortName || "",
+        state: address.admin1?.shortName || "",
+        postalCode: address.postalCode || "",
+        country: address.country?.isoAlpha3Code || "USA",
+        preciselyId: cf.PB_KEY || "",
+        confidence: cf.CONFIDENCE ? Number(cf.CONFIDENCE) : (result.score ?? null),
       };
     },
   }),
 
   geocode_address: tool({
     description:
-      "Fallback geocoding: get precise lat/lon for a US address when verify_address did not return coordinates. Only call this if verify_address returned null latitude/longitude.",
+      "Geocode a verified US address to get precise latitude/longitude coordinates. Call this after verify_address to get coordinates needed for routing and emergency lookups.",
     inputSchema: z.object({
       addressLine1: z.string().describe("Street address line 1"),
       city: z.string().describe("City name"),
@@ -67,7 +86,12 @@ export const tools = {
       postalCode: z.string().optional().describe("ZIP code"),
     }),
     execute: async ({ addressLine1, city, state, postalCode }) => {
-      const data = await preciselyPost("/v1/addresses/geocode", {
+      const data = await preciselyPost("/v1/geocode", {
+        preferences: {
+          maxResults: 1,
+          returnAllInfo: true,
+          factoryDescription: { label: "ggs", featureSpecific: {} },
+        },
         addresses: [
           {
             addressLines: [addressLine1],
@@ -77,39 +101,36 @@ export const tools = {
             country: "USA",
           },
         ],
-        preferences: {
-          maxResults: 1,
-          returnAllInfo: true,
-        },
       });
 
       if (data.error) {
         return { error: `Geocoding failed: ${JSON.stringify(data.details)}` };
       }
 
-      const responses = data.responses as Array<Record<string, unknown>>;
-      const candidates = responses?.[0]?.candidates as Array<Record<string, unknown>>;
-      if (!candidates?.[0]) {
+      const responses = data.responses as any[];
+      const results = responses?.[0]?.results as any[];
+      if (!results?.[0]) {
         return { error: "No geocoding results returned" };
       }
 
-      const candidate = candidates[0];
-      const location = candidate.location as Record<string, unknown> | undefined;
-      const address = candidate.address as Record<string, unknown> | undefined;
+      const result = results[0];
+      const address = result.address || {};
+      const cf = result.customFields || {};
+      const { latitude, longitude } = extractCoordinates(result.location);
 
       return {
-        latitude: location?.latitude ?? null,
-        longitude: location?.longitude ?? null,
-        preciselyId: candidate.preciselyId || "",
-        formattedAddress: address?.formattedAddress || "",
-        matchScore: candidate.matchScore ?? null,
+        latitude,
+        longitude,
+        preciselyId: cf.PB_KEY || "",
+        formattedAddress: address.formattedAddress || "",
+        matchScore: result.score ?? null,
       };
     },
   }),
 
   lookup_emergency_contacts: tool({
     description:
-      "Look up PSAP and AHJ (EMS, Fire, Police) emergency contacts for a US address. Returns dispatch center info, agency contacts with phone numbers, and the PSAP site address/coordinates for route calculation.",
+      "Look up PSAP and AHJ (EMS, Fire, Police) emergency contacts for a US address. Returns dispatch center info, agency contacts with phone numbers, and the PSAP site address for route calculation.",
     inputSchema: z.object({
       addressLine1: z.string().describe("Full street address line (e.g. '350 Jordan Rd Troy NY 12180, USA')"),
       city: z.string().describe("City name"),
@@ -120,14 +141,14 @@ export const tools = {
       const data = await preciselyPost("/v1/emergency-info/psap-ahj/address", {
         address: {
           addressLines: [`${addressLine1} ${city} ${state} ${postalCode || ""}, USA`],
-          city,
-          admin1: state,
+          admin1: "",
           admin2: "",
-          postalCode: postalCode || "",
-          postalCodeExt: "",
-          placeName: "",
+          city: "",
           borough: "",
           suburb: "",
+          postalCode: "",
+          postalCodeExt: "",
+          placeName: "",
         },
       });
 
@@ -135,31 +156,31 @@ export const tools = {
         return { error: `Emergency contacts lookup failed: ${JSON.stringify(data.details)}` };
       }
 
-      const response = data.response as Record<string, unknown> | undefined;
+      const response = data.response as any;
       if (!response || response.status === "ZERO_RESULTS") {
         return { error: "No emergency contact results found for this address" };
       }
 
-      const psapData = response.psap as Record<string, unknown> | undefined;
-      const ahjsData = response.ahjs as Array<Record<string, unknown>> | undefined;
-      const county = psapData?.county as Record<string, unknown> | undefined;
-      const siteDetails = psapData?.siteDetails as Record<string, unknown> | undefined;
-      const siteAddress = siteDetails?.address as Record<string, unknown> | undefined;
-      const siteGeo = siteDetails?.geocode as Record<string, unknown> | undefined;
+      const psapData = response.psap || {};
+      const ahjsData = response.ahjs || [];
+      const county = psapData.county || {};
+      const siteDetails = psapData.siteDetails || {};
+      const siteAddress = siteDetails.address || {};
+      const siteGeo = siteDetails.geocode || {};
 
       const psap = {
-        agency: psapData?.agency || "Unknown",
-        phone: psapData?.phone || "Unknown",
-        type: psapData?.type || "Unknown",
-        fccId: psapData?.fccId || "",
-        county: county?.name || "",
-        countyFips: county?.fips || "",
-        siteAddress: siteAddress?.formattedAddress || "",
-        siteLatitude: siteGeo?.latitude ?? null,
-        siteLongitude: siteGeo?.longitude ?? null,
+        agency: psapData.agency || "Unknown",
+        phone: psapData.phone || "Unknown",
+        type: psapData.type || "Unknown",
+        fccId: psapData.fccId || "",
+        county: county.name || "",
+        countyFips: county.fips || "",
+        siteAddress: siteAddress.formattedAddress || "",
+        siteLatitude: siteGeo.latitude ?? null,
+        siteLongitude: siteGeo.longitude ?? null,
       };
 
-      const ahjs = (ahjsData || []).map((ahj) => ({
+      const ahjs = ahjsData.map((ahj: any) => ({
         type: ahj.ahjType || ahj.type || "Unknown",
         agency: ahj.agency || "Unknown",
         phone: ahj.phone || "Unknown",
@@ -188,28 +209,28 @@ export const tools = {
         return { error: `PSAP location lookup failed: ${JSON.stringify(data.details)}` };
       }
 
-      const response = data.response as Record<string, unknown> | undefined;
+      const response = data.response as any;
       if (!response || response.status === "ZERO_RESULTS") {
         return { error: "No PSAP results found for these coordinates" };
       }
 
-      const psapData = response.psap as Record<string, unknown> | undefined;
-      const county = psapData?.county as Record<string, unknown> | undefined;
-      const siteDetails = psapData?.siteDetails as Record<string, unknown> | undefined;
-      const siteAddress = siteDetails?.address as Record<string, unknown> | undefined;
-      const siteGeo = siteDetails?.geocode as Record<string, unknown> | undefined;
+      const psapData = response.psap || {};
+      const county = psapData.county || {};
+      const siteDetails = psapData.siteDetails || {};
+      const siteAddress = siteDetails.address || {};
+      const siteGeo = siteDetails.geocode || {};
 
       return {
         psap: {
-          agency: psapData?.agency || "Unknown",
-          phone: psapData?.phone || "Unknown",
-          type: psapData?.type || "Unknown",
-          fccId: psapData?.fccId || "",
-          county: county?.name || "",
-          countyFips: county?.fips || "",
-          siteAddress: siteAddress?.formattedAddress || "",
-          siteLatitude: siteGeo?.latitude ?? null,
-          siteLongitude: siteGeo?.longitude ?? null,
+          agency: psapData.agency || "Unknown",
+          phone: psapData.phone || "Unknown",
+          type: psapData.type || "Unknown",
+          fccId: psapData.fccId || "",
+          county: county.name || "",
+          countyFips: county.fips || "",
+          siteAddress: siteAddress.formattedAddress || "",
+          siteLatitude: siteGeo.latitude ?? null,
+          siteLongitude: siteGeo.longitude ?? null,
         },
       };
     },
@@ -217,118 +238,92 @@ export const tools = {
 
   enrich_property: tool({
     description:
-      "Get property details, building info, business data, and hazard assessments for a US address via the Precisely Data Graph. Returns building type, stories, construction materials, heating fuel, flood/earthquake/wildfire risks, and business data (name, SIC/NAICS codes, employee count) for commercial properties. Critical for first responder pre-planning.",
+      "Get property details, building info, and business data for a US address via the Precisely Data Graph. Returns building type, area, elevation, property attributes, and business data for commercial properties. Critical for first responder pre-planning.",
     inputSchema: z.object({
-      addressLine1: z.string().describe("Street address line 1"),
-      city: z.string().describe("City name"),
-      state: z.string().describe("Two-letter state abbreviation"),
-      postalCode: z.string().optional().describe("ZIP code"),
+      address: z.string().describe("Full address string (e.g. '350 Jordan Rd Troy NY 12180')"),
     }),
-    execute: async ({ addressLine1, city, state, postalCode }) => {
-      const graphqlQuery = `{
-        address(
-          addressLine1: "${addressLine1.replace(/"/g, '\\"')}",
-          city: "${city.replace(/"/g, '\\"')}",
-          stateProvince: "${state.replace(/"/g, '\\"')}",
-          postalCode: "${(postalCode || "").replace(/"/g, '\\"')}",
-          country: "US"
-        ) {
-          preciselyId
-          formattedAddress
-          property {
-            pbKey
-            buildingArea
-            lotSize
-            yearBuilt
-            stories
-            buildingType
-            roofType
-            foundationType
-            exteriorWalls
-            heatingFuel
-            heatingType
-            coolingType
-            numberOfBedrooms
-            numberOfBathrooms
-            numberOfRooms
-            garageType
-            poolType
+    execute: async ({ address }) => {
+      const query = `query propertyByAddress {
+        getByAddress(address: "${address.replace(/"/g, '\\"')}") {
+          propertyAttributes {
+            data {
+              livingSquareFootage
+              bedroomCount
+              bathroomCount { value }
+              saleAmount
+            }
           }
-          business {
-            businessName
-            sicCode
-            naicsCode
-            employeeCount
+          addresses {
+            data {
+              preciselyID
+              latitude
+              longitude
+              propertyType { value description }
+              places {
+                data {
+                  businessName
+                  lineOfBusiness
+                  phone
+                }
+              }
+            }
           }
-          hazards {
-            earthquake { riskScore }
-            flood { zone floodRisk }
-            wildfire { riskScore }
-          }
-          demographics {
-            population
-            medianHouseholdIncome
+          buildings {
+            data {
+              buildingType { value description }
+              buildingArea
+              elevation
+            }
           }
         }
       }`;
 
-      const data = await preciselyPost("/v1/data-graph", {
-        query: graphqlQuery.replace(/\n/g, " ").replace(/\s+/g, " "),
-      });
+      const data = await preciselyGraphQL(query);
 
       if (data.error) {
         return { error: `Property enrichment failed: ${JSON.stringify(data.details)}` };
       }
 
-      const addressData = (data.data as Record<string, unknown>)?.address as Record<string, unknown> | undefined;
-      if (!addressData) {
+      // Handle GraphQL errors
+      if (data.errors) {
+        return { error: `Data Graph query error: ${JSON.stringify(data.errors)}` };
+      }
+
+      const gqlData = data.data as any;
+      const result = gqlData?.getByAddress;
+      if (!result) {
         return { error: "No property data returned for this address" };
       }
 
-      const prop = addressData.property as Record<string, unknown> | undefined;
-      const biz = addressData.business as Record<string, unknown> | undefined;
-      const hazards = addressData.hazards as Record<string, unknown> | undefined;
-      const demographics = addressData.demographics as Record<string, unknown> | undefined;
-      const earthquake = hazards?.earthquake as Record<string, unknown> | undefined;
-      const flood = hazards?.flood as Record<string, unknown> | undefined;
-      const wildfire = hazards?.wildfire as Record<string, unknown> | undefined;
+      const propAttrs = result.propertyAttributes;
+      const propData = propAttrs?.data?.[0];
+
+      const addrData = result.addresses?.data?.[0];
+      const propertyType = addrData?.propertyType;
+      const firstPlace = addrData?.places?.data?.[0];
+
+      const buildingData = result.buildings?.data?.[0];
+      const buildingType = buildingData?.buildingType;
+      const bathroomCount = propData?.bathroomCount;
 
       return {
         property: {
-          buildingType: prop?.buildingType || "Unknown",
-          stories: prop?.stories ?? null,
-          yearBuilt: prop?.yearBuilt ?? null,
-          buildingArea: prop?.buildingArea ?? null,
-          lotSize: prop?.lotSize ?? null,
-          roofType: prop?.roofType || "Unknown",
-          foundationType: prop?.foundationType || "Unknown",
-          exteriorWalls: prop?.exteriorWalls || "Unknown",
-          heatingFuel: prop?.heatingFuel || "Unknown",
-          heatingType: prop?.heatingType || "Unknown",
-          coolingType: prop?.coolingType || "Unknown",
-          numberOfBedrooms: prop?.numberOfBedrooms ?? null,
-          numberOfBathrooms: prop?.numberOfBathrooms ?? null,
-          numberOfRooms: prop?.numberOfRooms ?? null,
-          garageType: prop?.garageType || "None",
-          poolType: prop?.poolType || "None",
+          propertyType: propertyType?.description || propertyType?.value || "Unknown",
+          buildingType: buildingType?.description || buildingType?.value || "Unknown",
+          buildingArea: buildingData?.buildingArea ?? null,
+          elevation: buildingData?.elevation ?? null,
+          livingSquareFootage: propData?.livingSquareFootage ?? null,
+          bedroomCount: propData?.bedroomCount ?? null,
+          bathroomCount: bathroomCount?.value ?? null,
+          saleAmount: propData?.saleAmount ?? null,
+          latitude: addrData?.latitude ?? null,
+          longitude: addrData?.longitude ?? null,
+          preciselyId: addrData?.preciselyID || "",
         },
         business: {
-          businessName: biz?.businessName || null,
-          sicCode: biz?.sicCode || null,
-          naicsCode: biz?.naicsCode || null,
-          employeeCount: biz?.employeeCount ?? null,
-        },
-        hazards: {
-          earthquake: { riskScore: earthquake?.riskScore || "Unknown" },
-          flood: {
-            zone: flood?.zone || "Unknown",
-            floodRisk: flood?.floodRisk || "Unknown",
-          },
-          wildfire: { riskScore: wildfire?.riskScore || "Unknown" },
-        },
-        demographics: {
-          population: demographics?.population ?? null,
-          medianHouseholdIncome: demographics?.medianHouseholdIncome ?? null,
+          businessName: firstPlace?.businessName || null,
+          lineOfBusiness: firstPlace?.lineOfBusiness || null,
+          phone: firstPlace?.phone || null,
         },
       };
     },
@@ -336,31 +331,44 @@ export const tools = {
 
   calculate_route: tool({
     description:
-      "Calculate driving route and ETA from a station to the incident location. Use the PSAP siteLatitude/siteLongitude from lookup_emergency_contacts as the start point. If no site coordinates are available, use a central location in the same city as a reasonable estimate.",
+      "Calculate driving route and ETA from a station to the incident location. Returns total distance and travel time. Use the PSAP siteLatitude/siteLongitude from lookup_emergency_contacts as the start point when available.",
     inputSchema: z.object({
-      startLatitude: z.number().describe("Latitude of the responding station (use PSAP siteLatitude when available)"),
-      startLongitude: z.number().describe("Longitude of the responding station (use PSAP siteLongitude when available)"),
+      startLatitude: z.number().describe("Latitude of the responding station"),
+      startLongitude: z.number().describe("Longitude of the responding station"),
       endLatitude: z.number().describe("Latitude of the incident location"),
       endLongitude: z.number().describe("Longitude of the incident location"),
     }),
     execute: async ({ startLatitude, startLongitude, endLatitude, endLongitude }) => {
-      const data = await preciselyGet("/v1/routing/route", {
-        startPoint: `${startLatitude},${startLongitude}`,
-        endPoint: `${endLatitude},${endLongitude}`,
-        db: "driving",
-        optimizeBy: "time",
-        distanceUnit: "mi",
-        timeUnit: "min",
-        returnIntermediatePoints: "false",
+      const data = await preciselyGet("/v1/direction/location", {
+        origin: `${startLatitude},${startLongitude}`,
+        destination: `${endLatitude},${endLongitude}`,
+        mode: "car",
+        option: "flexible",
       });
 
       if (data.error) {
         return { error: `Route calculation failed: ${JSON.stringify(data.details)}` };
       }
 
+      // Parse response: routes[0] has distance (meters) and duration (seconds)
+      const routes = data.routes as any[];
+      const route = routes?.[0];
+
+      if (route) {
+        const distanceMeters = route.distance as number | undefined;
+        const durationSeconds = route.duration as number | undefined;
+
+        return {
+          totalDistance: distanceMeters != null ? (distanceMeters / 1609.344).toFixed(1) : "Unknown",
+          totalTime: durationSeconds != null ? (durationSeconds / 60).toFixed(1) : "Unknown",
+          distanceUnit: "mi",
+          timeUnit: "min",
+        };
+      }
+
       return {
-        totalDistance: data.totalDistance || "Unknown",
-        totalTime: data.totalTime || "Unknown",
+        totalDistance: "Unknown",
+        totalTime: "Unknown",
         distanceUnit: "mi",
         timeUnit: "min",
       };

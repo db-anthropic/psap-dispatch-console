@@ -26,32 +26,32 @@ export function BuildingCard({ data, business, isLoading }: BuildingCardProps) {
         <div className="rounded-lg bg-accent/10 border border-accent/20 px-3 py-2 mb-3">
           <p className="text-sm font-medium text-accent">{business.businessName}</p>
           <div className="flex gap-3 mt-1 text-xs text-muted">
-            {business.sicCode && <span>SIC: {business.sicCode}</span>}
-            {business.naicsCode && <span>NAICS: {business.naicsCode}</span>}
-            {business.employeeCount != null && (
-              <span>{business.employeeCount} employees</span>
-            )}
+            {business.lineOfBusiness && <span>{business.lineOfBusiness}</span>}
+            {business.phone && <span>{business.phone}</span>}
           </div>
         </div>
       )}
       <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-xs">
+        <DataRow label="Property Type" value={data.propertyType} />
         <DataRow label="Building Type" value={data.buildingType} />
-        <DataRow label="Stories" value={data.stories} />
-        <DataRow label="Year Built" value={data.yearBuilt} />
         <DataRow
           label="Building Area"
           value={data.buildingArea ? `${Number(data.buildingArea).toLocaleString()} sq ft` : ""}
         />
-        <DataRow label="Exterior Walls" value={data.exteriorWalls} />
-        <DataRow label="Roof Type" value={data.roofType} />
-        <DataRow label="Foundation" value={data.foundationType} />
-        <DataRow label="Heating Fuel" value={data.heatingFuel} />
-        <DataRow label="Heating Type" value={data.heatingType} />
-        <DataRow label="Cooling" value={data.coolingType} />
-        <DataRow label="Bedrooms" value={data.numberOfBedrooms} />
-        <DataRow label="Bathrooms" value={data.numberOfBathrooms} />
-        <DataRow label="Total Rooms" value={data.numberOfRooms} />
-        <DataRow label="Garage" value={data.garageType} />
+        <DataRow
+          label="Living Area"
+          value={data.livingSquareFootage ? `${Number(data.livingSquareFootage).toLocaleString()} sq ft` : ""}
+        />
+        <DataRow label="Bedrooms" value={data.bedroomCount} />
+        <DataRow label="Bathrooms" value={data.bathroomCount} />
+        <DataRow
+          label="Elevation"
+          value={data.elevation ? `${data.elevation} ft` : ""}
+        />
+        <DataRow
+          label="Sale Amount"
+          value={data.saleAmount ? `$${Number(data.saleAmount).toLocaleString()}` : ""}
+        />
       </div>
     </Card>
   );

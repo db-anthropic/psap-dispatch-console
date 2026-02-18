@@ -23,11 +23,11 @@ Do NOT follow a rigid script. Adapt your data gathering and briefing to the situ
 
 ### Step 1: Address Resolution
 As soon as the caller provides a location:
-- If they give a **street address**: Call \`verify_address\` to validate and standardize it. This also returns coordinates. Only call \`geocode_address\` as a fallback if verify_address fails or returns no coordinates.
+- If they give a **street address**: Call \`verify_address\` to validate and standardize it, then IMMEDIATELY call \`geocode_address\` with the verified address to get lat/lon coordinates. You need coordinates for routing.
 - If they give **GPS coordinates**: Call \`lookup_psap_by_location\` directly with the coordinates to get emergency contacts, then use the coordinates for property enrichment and routing.
 
 ### Step 2: Parallel Data Gathering (adapt based on emergency type)
-Once you have a verified address, call tools IN PARALLEL based on what matters most:
+Once you have a verified address and coordinates, call tools IN PARALLEL based on what matters most. Note: \`enrich_property\` takes a full address string (e.g. "350 Jordan Rd Troy NY 12180"), not structured fields.
 
 **Fire emergencies** — prioritize building data:
 - Call \`enrich_property\` (CRITICAL: construction materials, heating fuel, stories, year built)
