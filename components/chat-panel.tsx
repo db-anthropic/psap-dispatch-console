@@ -181,11 +181,18 @@ export function ChatPanel({
           const isDispatcherMsg = isUser && firstTextPart?.text?.startsWith("[DISPATCHER] ");
           const timestamp = getTimestamp(messageIndex, messages.length);
 
+          // Check if this assistant message contains tool calls — if so, hide all text
+          const hasToolParts = !isUser && (message.parts as any[]).some(
+            (p: any) => getToolName(p.type) !== null
+          );
+
           // Collect all renderable parts for this message
           const renderedParts: React.ReactNode[] = [];
 
           (message.parts as any[]).forEach((part: any, i: number) => {
             if (part.type === "text" && part.text?.trim()) {
+              // Hide ALL assistant text in messages with tool calls (briefing + commentary)
+              if (hasToolParts) return;
               // Filter out the dispatch briefing narrative (by identity or keyword)
               if (message.id === narrativeMessageId && i === narrativePartIndex) return;
               if (part.text.includes("DISPATCH BRIEFING")) return;
