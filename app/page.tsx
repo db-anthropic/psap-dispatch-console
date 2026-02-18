@@ -14,7 +14,7 @@ function getToolName(partType: string): string | null {
 }
 
 export default function Home() {
-  const { messages, sendMessage, status } = useChat();
+  const { messages, sendMessage, status, setMessages } = useChat();
   const [input, setInput] = useState("");
 
   const isLoading = status === "streaming" || status === "submitted";
@@ -29,6 +29,10 @@ export default function Home() {
   const handleScenario = (message: string) => {
     if (isLoading) return;
     sendMessage({ text: message });
+  };
+
+  const handleClear = () => {
+    setMessages([]);
   };
 
   // Extract tool data from all messages for the dispatch panel
@@ -119,6 +123,7 @@ export default function Home() {
             onInputChange={setInput}
             onSubmit={handleSubmit}
             onScenario={handleScenario}
+            onClear={handleClear}
             narrative={narrative}
           />
         </div>
