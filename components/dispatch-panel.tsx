@@ -33,6 +33,12 @@ export function DispatchPanel({
   const contactsData =
     toolResults.lookup_emergency_contacts || toolResults.lookup_psap_by_location;
 
+  // Extract coordinates for map links
+  const incidentLat = geocodeData?.latitude ?? propertyData?.property?.latitude;
+  const incidentLon = geocodeData?.longitude ?? propertyData?.property?.longitude;
+  const stationLat = contactsData?.psap?.siteLatitude;
+  const stationLon = contactsData?.psap?.siteLongitude;
+
   const hasAnyData =
     addressData || geocodeData || contactsData || propertyData || routeData || narrative;
 
@@ -87,6 +93,10 @@ export function DispatchPanel({
             <RouteCard
               data={routeData}
               isLoading={activeTools.includes("calculate_route")}
+              incidentLat={incidentLat}
+              incidentLon={incidentLon}
+              stationLat={stationLat}
+              stationLon={stationLon}
             />
             {narrative && <NarrativeCard text={narrative} />}
             {followUpQuestions.length > 0 && (

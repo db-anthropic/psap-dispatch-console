@@ -7,9 +7,20 @@ import { Card, CardHeader, CardSkeleton } from "./address-card";
 interface RouteCardProps {
   data?: any;
   isLoading: boolean;
+  incidentLat?: number | null;
+  incidentLon?: number | null;
+  stationLat?: number | null;
+  stationLon?: number | null;
 }
 
-export function RouteCard({ data, isLoading }: RouteCardProps) {
+export function RouteCard({
+  data,
+  isLoading,
+  incidentLat,
+  incidentLon,
+  stationLat,
+  stationLon,
+}: RouteCardProps) {
   if (!data && !isLoading) return null;
 
   if (isLoading && !data) {
@@ -27,6 +38,16 @@ export function RouteCard({ data, isLoading }: RouteCardProps) {
 
   const time = data.totalTime;
   const distance = data.totalDistance;
+
+  const hasRouteCoords =
+    incidentLat != null &&
+    incidentLon != null &&
+    stationLat != null &&
+    stationLon != null;
+
+  const mapsUrl = hasRouteCoords
+    ? `https://www.google.com/maps/dir/?api=1&origin=${stationLat},${stationLon}&destination=${incidentLat},${incidentLon}&travelmode=driving`
+    : null;
 
   return (
     <Card>
@@ -56,6 +77,20 @@ export function RouteCard({ data, isLoading }: RouteCardProps) {
           <span className="text-xs text-muted mt-1">From responding station</span>
         </div>
       </div>
+
+      {mapsUrl && (
+        <a
+          href={mapsUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="mt-3 flex items-center gap-1.5 text-xs text-accent hover:text-accent/80 transition-colors"
+        >
+          <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 6H5.25A2.25 2.25 0 0 0 3 8.25v10.5A2.25 2.25 0 0 0 5.25 21h10.5A2.25 2.25 0 0 0 18 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
+          </svg>
+          View Route on Google Maps
+        </a>
+      )}
     </Card>
   );
 }
