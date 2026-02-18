@@ -52,8 +52,11 @@ export function ChatPanel({
       {/* Chat header */}
       <div className="shrink-0 border-b border-border px-4 py-3">
         <h2 className="text-sm font-semibold uppercase tracking-wider text-muted">
-          911 Call Channel
+          Emergency 911 Agent
         </h2>
+        <p className="text-[10px] text-muted/60 mt-0.5">
+          Powered by Precisely &amp; Claude
+        </p>
       </div>
 
       {/* Messages */}
