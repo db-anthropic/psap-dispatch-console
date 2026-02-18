@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
+import { DemoScenarios } from "./demo-scenarios";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -8,6 +9,7 @@ const TOOL_LABELS: Record<string, { label: string; icon: string }> = {
   verify_address: { label: "Verifying address", icon: "📍" },
   geocode_address: { label: "Geocoding location", icon: "🌐" },
   lookup_emergency_contacts: { label: "Looking up emergency contacts", icon: "📞" },
+  lookup_psap_by_location: { label: "Looking up PSAP by coordinates", icon: "📡" },
   enrich_property: { label: "Enriching property data", icon: "🏠" },
   calculate_route: { label: "Calculating route", icon: "🚒" },
 };
@@ -24,6 +26,7 @@ interface ChatPanelProps {
   isLoading: boolean;
   onInputChange: (value: string) => void;
   onSubmit: (e: React.FormEvent) => void;
+  onScenario: (message: string) => void;
 }
 
 export function ChatPanel({
@@ -32,6 +35,7 @@ export function ChatPanel({
   isLoading,
   onInputChange,
   onSubmit,
+  onScenario,
 }: ChatPanelProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -149,8 +153,11 @@ export function ChatPanel({
         )}
       </div>
 
-      {/* Input */}
-      <div className="shrink-0 border-t border-border p-4">
+      {/* Scenario bar + Input */}
+      <div className="shrink-0 border-t border-border p-4 space-y-3">
+        {messages.length === 0 && (
+          <DemoScenarios onSelect={onScenario} disabled={isLoading} />
+        )}
         <form onSubmit={onSubmit} className="flex gap-2">
           <input
             type="text"

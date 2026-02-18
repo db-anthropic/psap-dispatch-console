@@ -6,19 +6,34 @@ import { Card, CardHeader, DataRow, CardSkeleton } from "./address-card";
 
 interface BuildingCardProps {
   data?: any;
+  business?: any;
   isLoading: boolean;
 }
 
-export function BuildingCard({ data, isLoading }: BuildingCardProps) {
+export function BuildingCard({ data, business, isLoading }: BuildingCardProps) {
   if (!data && !isLoading) return null;
 
   if (isLoading && !data) {
     return <CardSkeleton label="Building Profile" />;
   }
 
+  const hasBusiness = business?.businessName;
+
   return (
     <Card>
       <CardHeader icon={<BuildingIcon />} title="Building Profile" status="success" />
+      {hasBusiness && (
+        <div className="rounded-lg bg-accent/10 border border-accent/20 px-3 py-2 mb-3">
+          <p className="text-sm font-medium text-accent">{business.businessName}</p>
+          <div className="flex gap-3 mt-1 text-xs text-muted">
+            {business.sicCode && <span>SIC: {business.sicCode}</span>}
+            {business.naicsCode && <span>NAICS: {business.naicsCode}</span>}
+            {business.employeeCount != null && (
+              <span>{business.employeeCount} employees</span>
+            )}
+          </div>
+        </div>
+      )}
       <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-xs">
         <DataRow label="Building Type" value={data.buildingType} />
         <DataRow label="Stories" value={data.stories} />

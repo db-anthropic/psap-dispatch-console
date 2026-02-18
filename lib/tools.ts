@@ -5,7 +5,7 @@ import { preciselyPost, preciselyGet } from "./precisely";
 export const tools = {
   verify_address: tool({
     description:
-      "Verify and standardize a US street address using the Precisely Address Verification API. Returns the standardized address, confidence score, and PreciselyID. Call this as soon as the caller provides an address.",
+      "Verify and standardize a US street address. Returns the standardized address, confidence score, PreciselyID, and coordinates (lat/lon). Call this as soon as the caller provides an address. Coordinates are included — only use geocode_address as a fallback if this returns no coordinates.",
     inputSchema: z.object({
       addressLine1: z.string().describe("Street address line 1 (e.g. '350 Jordan Rd')"),
       addressLine2: z.string().optional().describe("Street address line 2 (suite, apt, etc.)"),
@@ -59,7 +59,7 @@ export const tools = {
 
   geocode_address: tool({
     description:
-      "Geocode a verified US address to get precise latitude/longitude coordinates and PreciselyID. Call this after verify_address succeeds.",
+      "Fallback geocoding: get precise lat/lon for a US address when verify_address did not return coordinates. Only call this if verify_address returned null latitude/longitude.",
     inputSchema: z.object({
       addressLine1: z.string().describe("Street address line 1"),
       city: z.string().describe("City name"),
@@ -109,7 +109,7 @@ export const tools = {
 
   lookup_emergency_contacts: tool({
     description:
-      "Look up PSAP (Public Safety Answering Point) and AHJ (Authority Having Jurisdiction) emergency contacts for EMS, Fire, and Police at a given US address. Returns dispatch center info and agency contacts with phone numbers.",
+      "Look up PSAP and AHJ (EMS, Fire, Police) emergency contacts for a US address. Returns dispatch center info, agency contacts with phone numbers, and the PSAP site address/coordinates for route calculation.",
     inputSchema: z.object({
       addressLine1: z.string().describe("Full street address line (e.g. '350 Jordan Rd Troy NY 12180, USA')"),
       city: z.string().describe("City name"),
@@ -145,6 +145,7 @@ export const tools = {
       const county = psapData?.county as Record<string, unknown> | undefined;
       const siteDetails = psapData?.siteDetails as Record<string, unknown> | undefined;
       const siteAddress = siteDetails?.address as Record<string, unknown> | undefined;
+      const siteGeo = siteDetails?.geocode as Record<string, unknown> | undefined;
 
       const psap = {
         agency: psapData?.agency || "Unknown",
@@ -154,6 +155,8 @@ export const tools = {
         county: county?.name || "",
         countyFips: county?.fips || "",
         siteAddress: siteAddress?.formattedAddress || "",
+        siteLatitude: siteGeo?.latitude ?? null,
+        siteLongitude: siteGeo?.longitude ?? null,
       };
 
       const ahjs = (ahjsData || []).map((ahj) => ({
@@ -167,9 +170,54 @@ export const tools = {
     },
   }),
 
+  lookup_psap_by_location: tool({
+    description:
+      "Look up PSAP emergency contacts using GPS coordinates (latitude/longitude). Use this when the caller provides coordinates instead of a street address, or when address verification fails but approximate coordinates are available.",
+    inputSchema: z.object({
+      latitude: z.number().describe("Latitude of the incident location"),
+      longitude: z.number().describe("Longitude of the incident location"),
+    }),
+    execute: async ({ latitude, longitude }) => {
+      const data = await preciselyPost("/v1/emergency-info/psap/location", {
+        location: {
+          coordinates: [longitude, latitude],
+        },
+      });
+
+      if (data.error) {
+        return { error: `PSAP location lookup failed: ${JSON.stringify(data.details)}` };
+      }
+
+      const response = data.response as Record<string, unknown> | undefined;
+      if (!response || response.status === "ZERO_RESULTS") {
+        return { error: "No PSAP results found for these coordinates" };
+      }
+
+      const psapData = response.psap as Record<string, unknown> | undefined;
+      const county = psapData?.county as Record<string, unknown> | undefined;
+      const siteDetails = psapData?.siteDetails as Record<string, unknown> | undefined;
+      const siteAddress = siteDetails?.address as Record<string, unknown> | undefined;
+      const siteGeo = siteDetails?.geocode as Record<string, unknown> | undefined;
+
+      return {
+        psap: {
+          agency: psapData?.agency || "Unknown",
+          phone: psapData?.phone || "Unknown",
+          type: psapData?.type || "Unknown",
+          fccId: psapData?.fccId || "",
+          county: county?.name || "",
+          countyFips: county?.fips || "",
+          siteAddress: siteAddress?.formattedAddress || "",
+          siteLatitude: siteGeo?.latitude ?? null,
+          siteLongitude: siteGeo?.longitude ?? null,
+        },
+      };
+    },
+  }),
+
   enrich_property: tool({
     description:
-      "Get property details, building information, and hazard data for a US address using the Precisely Data Graph. Returns building type, stories, construction materials, heating fuel, and flood/earthquake/wildfire risk assessments. Critical for first responder pre-planning.",
+      "Get property details, building info, business data, and hazard assessments for a US address via the Precisely Data Graph. Returns building type, stories, construction materials, heating fuel, flood/earthquake/wildfire risks, and business data (name, SIC/NAICS codes, employee count) for commercial properties. Critical for first responder pre-planning.",
     inputSchema: z.object({
       addressLine1: z.string().describe("Street address line 1"),
       city: z.string().describe("City name"),
@@ -206,6 +254,12 @@ export const tools = {
             garageType
             poolType
           }
+          business {
+            businessName
+            sicCode
+            naicsCode
+            employeeCount
+          }
           hazards {
             earthquake { riskScore }
             flood { zone floodRisk }
@@ -232,6 +286,7 @@ export const tools = {
       }
 
       const prop = addressData.property as Record<string, unknown> | undefined;
+      const biz = addressData.business as Record<string, unknown> | undefined;
       const hazards = addressData.hazards as Record<string, unknown> | undefined;
       const demographics = addressData.demographics as Record<string, unknown> | undefined;
       const earthquake = hazards?.earthquake as Record<string, unknown> | undefined;
@@ -257,6 +312,12 @@ export const tools = {
           garageType: prop?.garageType || "None",
           poolType: prop?.poolType || "None",
         },
+        business: {
+          businessName: biz?.businessName || null,
+          sicCode: biz?.sicCode || null,
+          naicsCode: biz?.naicsCode || null,
+          employeeCount: biz?.employeeCount ?? null,
+        },
         hazards: {
           earthquake: { riskScore: earthquake?.riskScore || "Unknown" },
           flood: {
@@ -275,10 +336,10 @@ export const tools = {
 
   calculate_route: tool({
     description:
-      "Calculate driving route and ETA from a fire/police station to the incident location. Returns total distance, travel time, and route summary. Use the responding agency's approximate station location as the start point.",
+      "Calculate driving route and ETA from a station to the incident location. Use the PSAP siteLatitude/siteLongitude from lookup_emergency_contacts as the start point. If no site coordinates are available, use a central location in the same city as a reasonable estimate.",
     inputSchema: z.object({
-      startLatitude: z.number().describe("Latitude of the responding station"),
-      startLongitude: z.number().describe("Longitude of the responding station"),
+      startLatitude: z.number().describe("Latitude of the responding station (use PSAP siteLatitude when available)"),
+      startLongitude: z.number().describe("Longitude of the responding station (use PSAP siteLongitude when available)"),
       endLatitude: z.number().describe("Latitude of the incident location"),
       endLongitude: z.number().describe("Longitude of the incident location"),
     }),

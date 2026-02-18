@@ -26,6 +26,11 @@ export default function Home() {
     setInput("");
   };
 
+  const handleScenario = (message: string) => {
+    if (isLoading) return;
+    sendMessage({ text: message });
+  };
+
   // Extract tool data from all messages for the dispatch panel
   const { toolResults, activeTools, narrative } = useMemo(() => {
     const results: Record<string, any> = {};
@@ -35,20 +40,31 @@ export default function Home() {
     for (const message of messages) {
       if (message.role !== "assistant") continue;
 
+      let completedToolCount = 0;
+      let lastTextAfterTools = "";
+
       for (const part of message.parts as any[]) {
         const toolName = getToolName(part.type);
         if (toolName) {
           if (part.state === "output-available") {
             results[toolName] = part.output;
+            completedToolCount++;
           } else if (
             part.state === "input-available" ||
             part.state === "input-streaming"
           ) {
             active.push(toolName);
           }
-        } else if (part.type === "text" && part.text?.length > 300) {
-          lastNarrative = part.text;
+        } else if (part.type === "text" && part.text?.trim()) {
+          // Track the last text part in this message
+          lastTextAfterTools = part.text;
         }
+      }
+
+      // Narrative detection: look for the last text in a message where
+      // at least 3 tools have completed (the final briefing)
+      if (completedToolCount >= 3 && lastTextAfterTools.length > 200) {
+        lastNarrative = lastTextAfterTools;
       }
     }
 
@@ -110,6 +126,7 @@ export default function Home() {
             isLoading={isLoading}
             onInputChange={setInput}
             onSubmit={handleSubmit}
+            onScenario={handleScenario}
           />
         </div>
 

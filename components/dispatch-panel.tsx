@@ -22,9 +22,12 @@ export function DispatchPanel({
 }: DispatchPanelProps) {
   const addressData = toolResults.verify_address;
   const geocodeData = toolResults.geocode_address;
-  const contactsData = toolResults.lookup_emergency_contacts;
   const propertyData = toolResults.enrich_property;
   const routeData = toolResults.calculate_route;
+
+  // Merge contacts from address-based and location-based PSAP lookups
+  const contactsData =
+    toolResults.lookup_emergency_contacts || toolResults.lookup_psap_by_location;
 
   const hasAnyData =
     addressData || geocodeData || contactsData || propertyData || routeData || narrative;
@@ -63,6 +66,7 @@ export function DispatchPanel({
             />
             <BuildingCard
               data={propertyData?.property}
+              business={propertyData?.business}
               isLoading={activeTools.includes("enrich_property")}
             />
             <HazardCard
@@ -71,7 +75,10 @@ export function DispatchPanel({
             />
             <ContactsCard
               data={contactsData}
-              isLoading={activeTools.includes("lookup_emergency_contacts")}
+              isLoading={
+                activeTools.includes("lookup_emergency_contacts") ||
+                activeTools.includes("lookup_psap_by_location")
+              }
             />
             <RouteCard
               data={routeData}
