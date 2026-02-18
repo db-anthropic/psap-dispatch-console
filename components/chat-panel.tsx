@@ -161,6 +161,11 @@ export function ChatPanel({
 
         {messages.map((message: any, messageIndex: number) => {
           const isUser = message.role === "user";
+          // Check if this is a dispatcher follow-up (user message with [DISPATCHER] prefix)
+          const firstTextPart = (message.parts as any[]).find(
+            (p: any) => p.type === "text" && p.text?.trim()
+          );
+          const isDispatcherMsg = isUser && firstTextPart?.text?.startsWith("[DISPATCHER] ");
           const timestamp = getTimestamp(messageIndex, messages.length);
 
           // Collect all renderable parts for this message
@@ -168,14 +173,20 @@ export function ChatPanel({
 
           (message.parts as any[]).forEach((part: any, i: number) => {
             if (part.type === "text" && part.text?.trim()) {
-              // Filter out the dispatch briefing narrative
+              // Filter out the dispatch briefing narrative (including updated briefings)
               if (message.id === narrativeMessageId && i === narrativePartIndex) return;
+              if (part.text.length > 200 && part.text.includes("DISPATCH BRIEFING")) return;
 
               // Strip follow-up question lines
               const cleanText = stripFollowUps(part.text);
               if (!cleanText) return;
 
-              if (isUser) {
+              // Detect [DISPATCHER] prefix — render on right (purple) as dispatcher message
+              const isDispatcher = isUser && cleanText.startsWith("[DISPATCHER] ");
+              const displayText = isDispatcher ? cleanText.replace("[DISPATCHER] ", "") : cleanText;
+
+              if (isUser && !isDispatcher) {
+                // Caller message — left, gray
                 renderedParts.push(
                   <div key={i} className="flex justify-start mb-1">
                     <div
@@ -185,11 +196,12 @@ export function ChatPanel({
                         borderRadius: "18px 18px 18px 4px",
                       }}
                     >
-                      <div className="whitespace-pre-wrap">{cleanText}</div>
+                      <div className="whitespace-pre-wrap">{displayText}</div>
                     </div>
                   </div>
                 );
               } else {
+                // Dispatcher/agent message — right, purple (covers both assistant and [DISPATCHER] user messages)
                 renderedParts.push(
                   <div key={i} className="flex justify-end mb-1">
                     <div
@@ -199,7 +211,7 @@ export function ChatPanel({
                         borderRadius: "18px 18px 4px 18px",
                       }}
                     >
-                      <div className="whitespace-pre-wrap">{cleanText}</div>
+                      <div className="whitespace-pre-wrap">{displayText}</div>
                     </div>
                   </div>
                 );
@@ -250,7 +262,7 @@ export function ChatPanel({
               {/* Timestamp below the message group */}
               <div
                 className={`mt-0.5 text-[10px] ${
-                  isUser ? "text-left pl-1" : "text-right pr-1"
+                  isUser && !isDispatcherMsg ? "text-left pl-1" : "text-right pr-1"
                 }`}
                 style={{ color: "#4b5563" }}
               >

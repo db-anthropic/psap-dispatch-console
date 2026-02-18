@@ -57,6 +57,12 @@ export default function Home() {
     sendMessage({ text: message });
   };
 
+  /** Send a follow-up question with a dispatcher prefix so chat renders it on the right */
+  const handleFollowUp = (question: string) => {
+    if (isLoading) return;
+    sendMessage({ text: `[DISPATCHER] ${question}` });
+  };
+
   const handleClear = () => {
     setMessages([]);
   };
@@ -103,8 +109,12 @@ export default function Home() {
         }
       }
 
-      // Narrative detection: last text in a message with 3+ completed tools, >200 chars
-      if (completedToolCount >= 3 && lastTextAfterTools.length > 200) {
+      // Narrative detection: either (a) 3+ tools + long text, or (b) contains "DISPATCH BRIEFING"
+      const isNarrative =
+        (completedToolCount >= 3 && lastTextAfterTools.length > 200) ||
+        (lastTextAfterTools.length > 200 && lastTextAfterTools.includes("DISPATCH BRIEFING"));
+
+      if (isNarrative) {
         lastNarrative = lastTextAfterTools;
         narMsgId = message.id;
         narPartIdx = lastTextPartIndex;
@@ -182,7 +192,7 @@ export default function Home() {
             activeTools={activeTools}
             narrative={narrative}
             followUpQuestions={followUpQuestions}
-            onAskQuestion={handleScenario}
+            onAskQuestion={handleFollowUp}
           />
         </div>
       </div>
