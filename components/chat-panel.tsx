@@ -21,12 +21,25 @@ function getToolName(partType: string): string | null {
 }
 
 /**
- * Strip lines starting with ">> " from text. These follow-up questions
- * are now handled by the dispatch panel, so we simply remove them.
+ * Clean assistant text for chat display:
+ * 1. Strip everything after "---" separator (briefing content goes to dispatch panel)
+ * 2. Strip lines starting with ">> " (follow-up questions handled by dispatch panel)
+ * 3. Strip any remaining briefing markers
  */
-function stripFollowUps(text: string): string {
-  const lines = text.split("\n");
-  const filtered = lines.filter((line) => !line.startsWith(">> "));
+function cleanForChat(text: string): string {
+  // Split on "---" and only keep text before it (the short conversational part)
+  const separatorIndex = text.indexOf("\n---");
+  let cleaned = separatorIndex >= 0 ? text.slice(0, separatorIndex) : text;
+
+  // Also check for "---" at the start of a line without preceding newline
+  const altSep = cleaned.indexOf("\n\n---");
+  if (altSep >= 0) cleaned = cleaned.slice(0, altSep);
+
+  // Strip follow-up question lines
+  const lines = cleaned.split("\n");
+  const filtered = lines.filter(
+    (line) => !line.startsWith(">> ") && !line.includes("DISPATCH BRIEFING")
+  );
 
   // Trim trailing empty lines
   while (filtered.length > 0 && filtered[filtered.length - 1].trim() === "") {
@@ -179,7 +192,7 @@ export function ChatPanel({
               if (part.text.includes("**DISPATCH")) return;
 
               // Strip follow-up question lines
-              const cleanText = stripFollowUps(part.text);
+              const cleanText = cleanForChat(part.text);
               if (!cleanText) return;
 
               // Detect [DISPATCHER] prefix — render on right (purple) as dispatcher message
