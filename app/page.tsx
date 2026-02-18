@@ -59,7 +59,6 @@ export default function Home() {
 
   /** Send a follow-up question with a dispatcher prefix so chat renders it on the right */
   const handleFollowUp = (question: string) => {
-    if (isLoading) return;
     sendMessage({ text: `[DISPATCHER] ${question}` });
   };
 
@@ -109,12 +108,15 @@ export default function Home() {
         }
       }
 
-      // Narrative detection: either (a) 3+ tools + long text, or (b) contains "DISPATCH BRIEFING"
-      const isNarrative =
-        (completedToolCount >= 3 && lastTextAfterTools.length > 200) ||
-        (lastTextAfterTools.length > 200 && lastTextAfterTools.includes("DISPATCH BRIEFING"));
-
-      if (isNarrative) {
+      // Narrative detection: if message has 3+ completed tools, the last text
+      // is ALWAYS the briefing — no length check needed (fixes streaming leak)
+      if (completedToolCount >= 3 && lastTextPartIndex >= 0) {
+        lastNarrative = lastTextAfterTools;
+        narMsgId = message.id;
+        narPartIdx = lastTextPartIndex;
+      }
+      // Also catch updated briefings (no tools, but contains the keyword)
+      else if (lastTextAfterTools.includes("DISPATCH BRIEFING") && lastTextPartIndex >= 0) {
         lastNarrative = lastTextAfterTools;
         narMsgId = message.id;
         narPartIdx = lastTextPartIndex;

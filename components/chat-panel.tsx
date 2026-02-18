@@ -173,9 +173,10 @@ export function ChatPanel({
 
           (message.parts as any[]).forEach((part: any, i: number) => {
             if (part.type === "text" && part.text?.trim()) {
-              // Filter out the dispatch briefing narrative (including updated briefings)
+              // Filter out the dispatch briefing narrative (by identity or keyword)
               if (message.id === narrativeMessageId && i === narrativePartIndex) return;
-              if (part.text.length > 200 && part.text.includes("DISPATCH BRIEFING")) return;
+              if (part.text.includes("DISPATCH BRIEFING")) return;
+              if (part.text.includes("**DISPATCH")) return;
 
               // Strip follow-up question lines
               const cleanText = stripFollowUps(part.text);
