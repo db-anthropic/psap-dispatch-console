@@ -57,9 +57,18 @@ export default function Home() {
     sendMessage({ text: message });
   };
 
-  /** Send a follow-up question with a dispatcher prefix so chat renders it on the right */
+  /** Insert a follow-up question as a local dispatcher message (no API call).
+   *  The caller (user) will type a response, which then triggers Claude. */
   const handleFollowUp = (question: string) => {
-    sendMessage({ text: `[DISPATCHER] ${question}` });
+    setMessages((prev) => [
+      ...prev,
+      {
+        id: `dispatcher-${Date.now()}`,
+        role: "user" as const,
+        parts: [{ type: "text" as const, text: `[DISPATCHER] ${question}` }],
+        createdAt: new Date(),
+      },
+    ]);
   };
 
   const handleClear = () => {
