@@ -13,6 +13,32 @@ function getToolName(partType: string): string | null {
   return null;
 }
 
+/** Split >> prefixed follow-up questions from narrative text */
+function extractFollowUps(text: string): { cleanText: string; questions: string[] } {
+  const lines = text.split("\n");
+  const contentLines: string[] = [];
+  const questions: string[] = [];
+
+  for (const line of lines) {
+    if (line.startsWith(">> ")) {
+      questions.push(line.slice(3).trim());
+    } else {
+      contentLines.push(line);
+    }
+  }
+
+  // Trim trailing empty lines / separators
+  while (
+    contentLines.length > 0 &&
+    (contentLines[contentLines.length - 1].trim() === "" ||
+      contentLines[contentLines.length - 1].trim() === "---")
+  ) {
+    contentLines.pop();
+  }
+
+  return { cleanText: contentLines.join("\n").trim(), questions };
+}
+
 export default function Home() {
   const { messages, sendMessage, status, setMessages } = useChat();
   const [input, setInput] = useState("");
@@ -36,18 +62,30 @@ export default function Home() {
   };
 
   // Extract tool data from all messages for the dispatch panel
-  const { toolResults, activeTools, narrative } = useMemo(() => {
+  const {
+    toolResults,
+    activeTools,
+    narrative,
+    followUpQuestions,
+    narrativeMessageId,
+    narrativePartIndex,
+  } = useMemo(() => {
     const results: Record<string, any> = {};
     const active: string[] = [];
     let lastNarrative = "";
+    let narMsgId = "";
+    let narPartIdx = -1;
 
     for (const message of messages) {
       if (message.role !== "assistant") continue;
 
       let completedToolCount = 0;
       let lastTextAfterTools = "";
+      let lastTextPartIndex = -1;
 
-      for (const part of message.parts as any[]) {
+      const parts = message.parts as any[];
+      for (let i = 0; i < parts.length; i++) {
+        const part = parts[i];
         const toolName = getToolName(part.type);
         if (toolName) {
           if (part.state === "output-available") {
@@ -60,22 +98,31 @@ export default function Home() {
             active.push(toolName);
           }
         } else if (part.type === "text" && part.text?.trim()) {
-          // Track the last text part in this message
           lastTextAfterTools = part.text;
+          lastTextPartIndex = i;
         }
       }
 
-      // Narrative detection: look for the last text in a message where
-      // at least 3 tools have completed (the final briefing)
+      // Narrative detection: last text in a message with 3+ completed tools, >200 chars
       if (completedToolCount >= 3 && lastTextAfterTools.length > 200) {
         lastNarrative = lastTextAfterTools;
+        narMsgId = message.id;
+        narPartIdx = lastTextPartIndex;
       }
     }
+
+    // Extract follow-up questions from narrative
+    const { cleanText, questions } = lastNarrative
+      ? extractFollowUps(lastNarrative)
+      : { cleanText: "", questions: [] };
 
     return {
       toolResults: results,
       activeTools: active,
-      narrative: lastNarrative,
+      narrative: cleanText,
+      followUpQuestions: questions,
+      narrativeMessageId: narMsgId,
+      narrativePartIndex: narPartIdx,
     };
   }, [messages]);
 
@@ -84,7 +131,6 @@ export default function Home() {
       {/* Header */}
       <header className="flex shrink-0 items-center justify-between border-b border-border px-6 py-3 bg-surface">
         <div className="flex items-center gap-3">
-          {/* Precisely logo mark */}
           <svg className="h-7 w-7 text-accent" viewBox="0 0 32 32" fill="currentColor">
             <path d="M16 0C7.163 0 0 7.163 0 16s7.163 16 16 16 16-7.163 16-16S24.837 0 16 0zm-2.4 24h-3.2V8h6.4c3.535 0 6.4 2.865 6.4 6.4s-2.865 6.4-6.4 6.4H13.6V24zm0-6.4h3.2c1.767 0 3.2-1.433 3.2-3.2s-1.433-3.2-3.2-3.2h-3.2v6.4z" />
           </svg>
@@ -124,7 +170,8 @@ export default function Home() {
             onSubmit={handleSubmit}
             onScenario={handleScenario}
             onClear={handleClear}
-            narrative={narrative}
+            narrativeMessageId={narrativeMessageId}
+            narrativePartIndex={narrativePartIndex}
           />
         </div>
 
@@ -134,6 +181,8 @@ export default function Home() {
             toolResults={toolResults}
             activeTools={activeTools}
             narrative={narrative}
+            followUpQuestions={followUpQuestions}
+            onAskQuestion={handleScenario}
           />
         </div>
       </div>
