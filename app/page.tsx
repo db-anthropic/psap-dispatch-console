@@ -79,39 +79,31 @@ export default function Home() {
     <div className="flex h-screen flex-col bg-background">
       {/* Header */}
       <header className="flex shrink-0 items-center justify-between border-b border-border px-6 py-3 bg-surface">
-        <div className="flex items-center gap-4">
-          <div className="flex items-center gap-2">
-            <svg
-              className="h-5 w-5 text-danger"
-              fill="none"
-              viewBox="0 0 24 24"
-              strokeWidth={2}
-              stroke="currentColor"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z"
-              />
-            </svg>
+        <div className="flex items-center gap-3">
+          {/* Precisely logo mark */}
+          <svg className="h-7 w-7 text-accent" viewBox="0 0 32 32" fill="currentColor">
+            <path d="M16 0C7.163 0 0 7.163 0 16s7.163 16 16 16 16-7.163 16-16S24.837 0 16 0zm-2.4 24h-3.2V8h6.4c3.535 0 6.4 2.865 6.4 6.4s-2.865 6.4-6.4 6.4H13.6V24zm0-6.4h3.2c1.767 0 3.2-1.433 3.2-3.2s-1.433-3.2-3.2-3.2h-3.2v6.4z" />
+          </svg>
+          <div>
             <h1 className="text-lg font-semibold tracking-tight text-white">
-              PSAP Dispatch Intelligence Console
+              <span className="text-accent">Precisely</span>{" "}
+              <span className="font-normal text-gray-300">Geo Intelligence Demo</span>
             </h1>
           </div>
         </div>
         <div className="flex items-center gap-6 text-sm text-muted">
-          <span className="hidden sm:inline">
+          <span className="hidden sm:inline text-xs">
             Powered by{" "}
-            <span className="font-medium text-accent">Precisely</span>
+            <span className="font-medium text-accent">Precisely APIs</span>
             {" + "}
-            <span className="font-medium text-warning">Claude AI</span>
+            <span className="font-medium text-orange-400">Claude AI</span>
           </span>
           <span className="flex items-center gap-2">
             <span className="relative flex h-2 w-2">
               <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-success opacity-75" />
               <span className="relative inline-flex h-2 w-2 rounded-full bg-success" />
             </span>
-            <span className="text-success">Active</span>
+            <span className="text-success text-xs">Active</span>
           </span>
         </div>
       </header>

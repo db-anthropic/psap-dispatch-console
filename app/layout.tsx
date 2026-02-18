@@ -13,9 +13,9 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "PSAP Dispatch Intelligence Console",
+  title: "Precisely Geo Intelligence Demo",
   description:
-    "AI-powered 911 dispatch console combining Precisely location APIs with Claude intelligence for real-time first responder briefings.",
+    "Geo intelligence demo combining Precisely location APIs with Claude AI for real-time emergency dispatch briefings.",
 };
 
 export default function RootLayout({
