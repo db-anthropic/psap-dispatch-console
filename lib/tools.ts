@@ -4,6 +4,11 @@ import { preciselyPost, preciselyGet, preciselyGraphQL } from "./precisely";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
+/** Precisely uses -9999 as a "no data" sentinel — convert to null for clean display. */
+function filterSentinel(val: any): any {
+  return val === -9999 || val === "-9999" ? null : val;
+}
+
 /**
  * Extract lat/lon from the Precisely geocode response location field.
  * Coordinates are in GeoJSON format: [longitude, latitude]
@@ -313,10 +318,10 @@ export const tools = {
           buildingType: buildingType?.description || buildingType?.value || "Unknown",
           buildingArea: buildingData?.buildingArea ?? null,
           elevation: buildingData?.elevation ?? null,
-          livingSquareFootage: propData?.livingSquareFootage ?? null,
-          bedroomCount: propData?.bedroomCount ?? null,
-          bathroomCount: bathroomCount?.value ?? null,
-          saleAmount: propData?.saleAmount ?? null,
+          livingSquareFootage: filterSentinel(propData?.livingSquareFootage ?? null),
+          bedroomCount: filterSentinel(propData?.bedroomCount ?? null),
+          bathroomCount: filterSentinel(bathroomCount?.value ?? null),
+          saleAmount: filterSentinel(propData?.saleAmount ?? null),
           latitude: addrData?.latitude ?? null,
           longitude: addrData?.longitude ?? null,
           preciselyId: addrData?.preciselyID || "",
@@ -332,7 +337,7 @@ export const tools = {
 
   calculate_route: tool({
     description:
-      "Calculate driving route and ETA from a station to the incident location. Returns total distance and travel time. Use the PSAP siteLatitude/siteLongitude from lookup_emergency_contacts as the start point when available.",
+      "Calculate driving route and ETA from a station to the incident location. Returns total distance and travel time. Use the PSAP siteLatitude/siteLongitude from lookup_emergency_contacts as the start point. Do NOT geocode the AHJ mailing address — the PSAP coordinates are already provided.",
     inputSchema: z.object({
       startLatitude: z.number().describe("Latitude of the responding station"),
       startLongitude: z.number().describe("Longitude of the responding station"),

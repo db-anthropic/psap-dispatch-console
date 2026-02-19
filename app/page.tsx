@@ -103,7 +103,11 @@ export default function Home() {
         const toolName = getToolName(part.type);
         if (toolName) {
           if (part.state === "output-available") {
-            results[toolName] = part.output;
+            // Keep the first geocode (incident location) — don't let
+            // subsequent geocodes (e.g. AHJ station) overwrite it
+            if (!(toolName === "geocode_address" && results[toolName])) {
+              results[toolName] = part.output;
+            }
             completedToolCount++;
           } else if (
             part.state === "input-available" ||

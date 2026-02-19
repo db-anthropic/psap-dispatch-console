@@ -56,16 +56,10 @@ Once you have a verified address and coordinates, call tools IN PARALLEL:
 - \`enrich_property\` — takes a full address string (e.g. "350 Jordan Rd Troy NY 12180")
 - \`lookup_emergency_contacts\` — returns PSAP + AHJ agencies with mailing addresses
 
-### Step 3: Route Calculation from AHJ
-After \`lookup_emergency_contacts\` returns:
-1. Identify the **relevant AHJ** based on emergency type:
-   - Fire → use the Fire AHJ's \`mailingAddress\`
-   - Medical → use the EMS AHJ's \`mailingAddress\`
-   - Police → use the Police AHJ's \`mailingAddress\`
-2. Call \`geocode_address\` with the AHJ's mailing address to get its coordinates
-3. Call \`calculate_route\` from those AHJ coordinates to the incident coordinates
+### Step 3: Route Calculation
+After \`lookup_emergency_contacts\` returns, use the PSAP's \`siteLatitude\` and \`siteLongitude\` as the route start point. Call \`calculate_route\` from those PSAP coordinates to the incident coordinates (from \`geocode_address\`).
 
-**Fallback**: If no AHJ mailing address is available, use the PSAP \`siteAddress\` instead.
+Do NOT call \`geocode_address\` again for the AHJ/PSAP station — the coordinates are already provided in the emergency contacts response.
 
 ### GPS Coordinate Input
 If coordinates are provided instead of an address:
