@@ -21,35 +21,6 @@ function getToolName(partType: string): string | null {
 }
 
 /**
- * Clean assistant text for chat display:
- * 1. Strip everything after "---" separator (briefing content goes to dispatch panel)
- * 2. Strip lines starting with ">> " (follow-up questions handled by dispatch panel)
- * 3. Strip any remaining briefing markers
- */
-function cleanForChat(text: string): string {
-  // Split on "---" and only keep text before it (the short conversational part)
-  const separatorIndex = text.indexOf("\n---");
-  let cleaned = separatorIndex >= 0 ? text.slice(0, separatorIndex) : text;
-
-  // Also check for "---" at the start of a line without preceding newline
-  const altSep = cleaned.indexOf("\n\n---");
-  if (altSep >= 0) cleaned = cleaned.slice(0, altSep);
-
-  // Strip follow-up question lines
-  const lines = cleaned.split("\n");
-  const filtered = lines.filter(
-    (line) => !line.startsWith(">> ") && !line.includes("DISPATCH BRIEFING")
-  );
-
-  // Trim trailing empty lines
-  while (filtered.length > 0 && filtered[filtered.length - 1].trim() === "") {
-    filtered.pop();
-  }
-
-  return filtered.join("\n").trim();
-}
-
-/**
  * Generate a realistic iMessage-style timestamp for a message.
  * Earlier messages get timestamps further in the past.
  */
@@ -181,67 +152,40 @@ export function ChatPanel({
           const isDispatcherMsg = isUser && firstTextPart?.text?.startsWith("[DISPATCHER] ");
           const timestamp = getTimestamp(messageIndex, messages.length);
 
-          // Check if this assistant message contains tool calls — if so, hide all text
-          const hasToolParts = !isUser && (message.parts as any[]).some(
-            (p: any) => getToolName(p.type) !== null
-          );
-
-          // Collect all renderable parts for this message
+          // Collect all renderable parts for this message.
+          // ASSISTANT messages: only tool status pills, NEVER text.
+          // USER messages: only text bubbles (caller gray / dispatcher purple).
           const renderedParts: React.ReactNode[] = [];
 
-          (message.parts as any[]).forEach((part: any, i: number) => {
-            if (part.type === "text" && part.text?.trim()) {
-              // Hide ALL assistant text in messages with tool calls (briefing + commentary)
-              if (hasToolParts) return;
-              // Filter out the dispatch briefing narrative (by identity or keyword)
-              if (message.id === narrativeMessageId && i === narrativePartIndex) return;
-              if (part.text.includes("DISPATCH BRIEFING")) return;
-              if (part.text.includes("**DISPATCH")) return;
+          if (isUser) {
+            // ── User message: render text bubbles only ──
+            (message.parts as any[]).forEach((part: any, i: number) => {
+              if (part.type !== "text" || !part.text?.trim()) return;
 
-              // Strip follow-up question lines
-              const cleanText = cleanForChat(part.text);
-              if (!cleanText) return;
-
-              // Detect [DISPATCHER] prefix — render on right (purple) as dispatcher message
-              const isDispatcher = isUser && cleanText.startsWith("[DISPATCHER] ");
+              const cleanText = part.text.trim();
+              const isDispatcher = cleanText.startsWith("[DISPATCHER] ");
               const displayText = isDispatcher ? cleanText.replace("[DISPATCHER] ", "") : cleanText;
 
-              if (isUser && !isDispatcher) {
-                // Caller message — left, gray
-                renderedParts.push(
-                  <div key={i} className="flex justify-start mb-1">
-                    <div
-                      className="max-w-[80%] px-3.5 py-2.5 text-sm leading-relaxed text-white"
-                      style={{
-                        backgroundColor: "#374151",
-                        borderRadius: "18px 18px 18px 4px",
-                      }}
-                    >
-                      <div className="whitespace-pre-wrap">{displayText}</div>
-                    </div>
+              renderedParts.push(
+                <div key={i} className={`flex ${isDispatcher ? "justify-end" : "justify-start"} mb-1`}>
+                  <div
+                    className="max-w-[80%] px-3.5 py-2.5 text-sm leading-relaxed text-white"
+                    style={{
+                      backgroundColor: isDispatcher ? "#7C3AED" : "#374151",
+                      borderRadius: isDispatcher ? "18px 18px 4px 18px" : "18px 18px 18px 4px",
+                    }}
+                  >
+                    <div className="whitespace-pre-wrap">{displayText}</div>
                   </div>
-                );
-              } else {
-                // Dispatcher/agent message — right, purple (covers both assistant and [DISPATCHER] user messages)
-                renderedParts.push(
-                  <div key={i} className="flex justify-end mb-1">
-                    <div
-                      className="max-w-[80%] px-3.5 py-2.5 text-sm leading-relaxed text-white"
-                      style={{
-                        backgroundColor: "#7C3AED",
-                        borderRadius: "18px 18px 4px 18px",
-                      }}
-                    >
-                      <div className="whitespace-pre-wrap">{displayText}</div>
-                    </div>
-                  </div>
-                );
-              }
-              return;
-            }
+                </div>
+              );
+            });
+          } else {
+            // ── Assistant message: render tool pills only, ZERO text ──
+            (message.parts as any[]).forEach((part: any, i: number) => {
+              const toolName = getToolName(part.type);
+              if (!toolName) return;
 
-            const toolName = getToolName(part.type);
-            if (toolName) {
               const toolInfo = TOOL_LABELS[toolName] || {
                 label: toolName,
                 icon: "&#9881;",
@@ -271,9 +215,8 @@ export function ChatPanel({
                   </div>
                 </div>
               );
-              return;
-            }
-          });
+            });
+          }
 
           if (renderedParts.length === 0) return null;
 
